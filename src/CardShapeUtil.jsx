@@ -63,6 +63,9 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
       ? Math.max(80, Math.min(maxImageH, w * aspectRatio))
       : fallbackImageH
     const summaryH = showDetails ? Math.max(80, h - titleH - imageH - tagsH - 10) : 0
+    const summaryFontSize = Math.max(8, Math.min(14, h * 0.04))
+    const tagFontSize = Math.max(6, Math.min(10, h * 0.02))
+    const titleFontSize = Math.max(9, Math.min(20, h * 0.05))
     const effectiveHeight = showDetails ? h : titleH + imageH
     const cardStyle = getSectionStyle('card', collection)
     const titleStyle = getSectionStyle('titleBar', collection)
@@ -94,7 +97,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
               height: titleH,
               padding: '8px 12px',
               fontWeight: 700,
-              fontSize: 20,
+              fontSize: titleFontSize,
               display: 'flex',
               alignItems: 'center',
               gap: 8
@@ -183,11 +186,12 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
                 {tags.map(tag => (
                   <span
                     key={tag}
-                    className='text-[12px] font-mono tags'
+                    className='font-mono tags'
                     style={{
                       ...tagStyle,
                       padding: '4px 10px',
                       borderRadius: 4,
+                      fontSize: tagFontSize
                     }}
                   >
                     {tag}
@@ -199,7 +203,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
                   ...summaryStyle,
                   height: summaryH,
                   padding: '12px',
-                  fontSize: 16,
+                  fontSize: summaryFontSize,
                   lineHeight: 1.35,
                   boxSizing: 'border-box'
                 }}

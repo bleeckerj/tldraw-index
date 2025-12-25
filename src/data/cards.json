@@ -2,7 +2,7 @@
   {
     "id": "card-1",
     "title": "Dune Poster",
-    "image": "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&q=80",
+    "image": "https://imagedelivery.net/gaLGizR3kCgx5yRLtiRIOw/0c8e3002-96bb-4d6f-d3d4-f29287a48100/public?format=webp",
     "summary": "Poster art sample from a content collection.",
     "collection": "posters",
     "tags": ["sci-fi", "art"],
@@ -10,17 +10,17 @@
   },
   {
     "id": "card-2",
-    "title": "Animated Loop",
+    "title": "Androids Dream of Electric Sheep",
     "image": "https://imagedelivery.net/gaLGizR3kCgx5yRLtiRIOw/c4ba1ab9-ea5d-4782-4c6f-46318fae9100/w=900?format=webp",
     "summary": "A small looping gif used as an animation example.",
-    "collection": "media",
+    "collection": "sheep",
     "tags": ["gif", "loop"],
     "url": "https://example.com/media/animated-loop"
   },
   {
     "id": "card-3",
-    "title": "Product Hero",
-    "image": "https://images.unsplash.com/photo-1503602642458-232111445657?w=1200&q=80",
+    "title": "Ghostwriter",
+    "image": "https://imagedelivery.net/gaLGizR3kCgx5yRLtiRIOw/16699520-00bf-494c-7e76-611c85386800/public?format=webp",
     "summary": "Hero image from product shots.",
     "collection": "photos",
     "tags": ["product", "hero"],

@@ -5,3 +5,15 @@
 
 html,body,#root { height: 100%; margin: 0; }
 .tldraw-root { height: 100%; }
+
+/* lighten resize handles for card selection */
+.tl-resize-handle {
+  background: #d6d6d6 !important;
+  border-color: #d6d6d6 !important;
+}
+
+.tl-container {
+  --tl-selection-color: #d6d6d6;
+  --tl-user-handles-fill: #d6d6d6;
+  --tl-user-handles-stroke: #d6d6d6;
+}

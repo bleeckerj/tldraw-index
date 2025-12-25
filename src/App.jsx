@@ -6,6 +6,7 @@ import CardShapeUtil from './CardShapeUtil.jsx'
 import cardsData from './data/cards.json'
 import { TimedLineShapeUtil, TimedLineTool, setTimedLineConfig } from './TimedLineTool.js'
 import { TimedDrawShapeUtil, TimedDrawTool } from './TimedDrawTool.js'
+import { TimedHighlightShapeUtil, TimedHighlightTool } from './TimedHighlightTool.js'
 
 function randomPos(i) {
   return {
@@ -69,11 +70,12 @@ export default function App() {
           title: card.title,
           image: card.image,
           summary: card.summary,
-          content: card.content,
+          url: card.url || '',
           collection: card.collection,
           cardId: card.id,
           tags: card.tags || [],
-          opacity: 1
+          opacity: 1,
+          showDetails: true
         },
         meta: { cardId: card.id },
         index: `a${idx}`
@@ -89,11 +91,11 @@ export default function App() {
     const editor = editorRef.current
     const current = editor.getCurrentPageShapes().filter(s => s.type === 'card')
     const cardById = new Map(cardsData.map(c => [c.id, c]))
-    const updates = current.map(shape => {
-      const card = cardById.get(shape.props.cardId)
-      const opacity = visibleIds.has(shape.props.cardId) ? 1 : 0
-      if (!card) return null
-      return {
+      const updates = current.map(shape => {
+        const card = cardById.get(shape.props.cardId)
+        const opacity = visibleIds.has(shape.props.cardId) ? 1 : 0
+        if (!card) return null
+        return {
         id: shape.id,
         type: 'card',
         props: {
@@ -101,11 +103,12 @@ export default function App() {
           title: card.title,
           image: card.image,
           summary: card.summary,
-          content: card.content,
+          url: card.url || '',
           collection: card.collection,
           cardId: card.id,
           tags: card.tags || [],
-          opacity
+          opacity,
+          showDetails: shape.props.showDetails ?? true
         }
       }
     }).filter(Boolean)
@@ -117,6 +120,21 @@ export default function App() {
     if (checked) next.add(c)
     else next.delete(c)
     setActiveCollections(next)
+  }
+
+  function toggleDetails(cardId) {
+    if (!editorRef.current) return
+    const shape = editorRef.current
+      .getCurrentPageShapes()
+      .find(s => s.type === 'card' && s.props.cardId === cardId)
+    if (shape) {
+      const next = !(shape.props.showDetails ?? true)
+      editorRef.current.updateShapes([{
+        id: shape.id,
+        type: shape.type,
+        props: { ...shape.props, showDetails: next }
+      }])
+    }
   }
 
   function toggleTag(t, checked) {
@@ -170,10 +188,13 @@ export default function App() {
   // pinch zoom on trackpad
   function onWheel(e) {
     if (!editorRef.current || !e.ctrlKey) return
-    e.preventDefault()
-    const rect = e.currentTarget.getBoundingClientRect()
-    const center = [e.clientX - rect.left, e.clientY - rect.top]
-    editorRef.current.zoomBy(-e.deltaY / 500, center)
+    // best effort prevent the browser zoom; React's wheel may be passive, so this may be ignored
+    e.preventDefault?.()
+    const editor = editorRef.current
+    if (typeof editor.zoomIn === 'function' && typeof editor.zoomOut === 'function') {
+      if (e.deltaY < 0) editor.zoomIn()
+      else editor.zoomOut()
+    }
   }
 
   // timed line config -> tool module
@@ -195,10 +216,10 @@ export default function App() {
         rafId = requestAnimationFrame(tick)
         return
       }
-      const now = performance.now()
+      const now = Date.now()
       const shapes = editor
         .getCurrentPageShapes()
-        .filter(s => s.type === 'timed-line' || s.type === 'timed-draw')
+        .filter(s => s.type === 'timed-line' || s.type === 'timed-draw' || s.type === 'timed-highlight')
       if (shapes.length) {
         const updates = []
         const toDelete = []
@@ -260,6 +281,15 @@ export default function App() {
           onSelect() {
             editor.setCurrentTool('timed-draw')
           }
+        },
+        'timed-highlight': {
+          id: 'timed-highlight',
+          label: 'Timed highlight',
+          icon: 'tool-highlight',
+          kbd: 'shift+h',
+          onSelect() {
+            editor.setCurrentTool('timed-highlight')
+          }
         }
       }
     }
@@ -270,7 +300,18 @@ export default function App() {
       <DefaultToolbarContent />
       <ToolbarItem tool="timed-line" />
       <ToolbarItem tool="timed-draw" />
+      <ToolbarItem tool="timed-highlight" />
     </>
+  )
+
+  const ThemeCss = () => (
+    <style>{`
+      .tl-container {
+        --tl-selection-color: #d6d6d6;
+        --tl-user-handles-fill: #d6d6d6;
+        --tl-user-handles-stroke: #d6d6d6;
+      }
+    `}</style>
   )
 
   const uiComponents = useMemo(() => ({
@@ -278,7 +319,8 @@ export default function App() {
       <DefaultToolbar {...props}>
         <CustomToolbarContent />
       </DefaultToolbar>
-    )
+    ),
+    InFrontOfTheCanvas: ThemeCss
   }), [])
 
   return (
@@ -329,7 +371,16 @@ export default function App() {
               <div style={{ fontSize: 12, color: '#666' }}>
                 <div>Collection: {selectedCard.collection}</div>
                 <div>Tags: {selectedCard.tags.join(', ')}</div>
-                <div style={{ marginTop: 8 }}>{selectedCard.content}</div>
+                {selectedCard.url && (
+                  <div style={{ marginTop: 8 }}>
+                    <a href={selectedCard.url} target="_blank" rel="noreferrer">Open detail</a>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <button onClick={() => toggleDetails(selectedCard.id)}>
+                  Toggle details
+                </button>
               </div>
             </div>
           ) : <div>(select a card)</div>}
@@ -366,10 +417,10 @@ export default function App() {
 
       <div style={{ flex: 1, position: 'relative' }} onWheel={onWheel}>
         <Tldraw
-          tools={[TimedLineTool, TimedDrawTool]}
+          tools={[TimedLineTool, TimedDrawTool, TimedHighlightTool]}
           onMount={editor => { editorRef.current = editor; setAppReady(true) }}
           onChange={handleChange}
-          shapeUtils={[CardShapeUtil, TimedLineShapeUtil, TimedDrawShapeUtil]}
+          shapeUtils={[CardShapeUtil, TimedLineShapeUtil, TimedDrawShapeUtil, TimedHighlightShapeUtil]}
           overrides={uiOverrides}
           components={uiComponents}
         />

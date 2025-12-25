@@ -1,5 +1,5 @@
 import React from 'react'
-import { BaseBoxShapeUtil, HTMLContainer } from '@tldraw/editor'
+import { BaseBoxShapeUtil, HTMLContainer, Rectangle2d } from '@tldraw/editor'
 import stylesConfig from './data/styles.json'
 
 function getSectionStyle(section, collection) {
@@ -21,8 +21,26 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
       content: '',
       collection: '',
       cardId: '',
-      opacity: 1
+      opacity: 1,
+      showDetails: true
     }
+  }
+
+  getEffectiveHeight(shape) {
+    const { w, h, showDetails = true } = shape.props
+    if (showDetails) return h
+    const titleH = 40
+    const reserved = titleH + 0 + 20
+    const fallbackImageH = Math.max(140, Math.min(220, h * 0.45))
+    const maxImageH = Math.max(100, h - reserved)
+    const imageH = Math.max(80, Math.min(maxImageH, w * 0.75))
+    return titleH + imageH
+  }
+
+  getGeometry(shape) {
+    const { w } = shape.props
+    const effH = this.getEffectiveHeight(shape)
+    return new Rectangle2d({ x: 0, y: 0, width: w, height: effH, isFilled: false })
   }
 
   canResize() {
@@ -34,17 +52,18 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
   }
 
   component(shape) {
-    const { w, h, title, image, summary, tags = [], opacity = 1, collection } = shape.props
+    const { w, h, title, image, summary, tags = [], opacity = 1, collection, showDetails = true } = shape.props
     const [aspectRatio, setAspectRatio] = React.useState(null)
     const titleH = 40
-    const tagsH = 40
+    const tagsH = showDetails ? 40 : 0
     const reserved = titleH + tagsH + 20
     const fallbackImageH = Math.max(140, Math.min(220, h * 0.45))
     const maxImageH = Math.max(100, h - reserved)
     const imageH = aspectRatio
       ? Math.max(80, Math.min(maxImageH, w * aspectRatio))
       : fallbackImageH
-    const summaryH = Math.max(80, h - titleH - imageH - tagsH - 10)
+    const summaryH = showDetails ? Math.max(80, h - titleH - imageH - tagsH - 10) : 0
+    const effectiveHeight = showDetails ? h : titleH + imageH
     const cardStyle = getSectionStyle('card', collection)
     const titleStyle = getSectionStyle('titleBar', collection)
     const imageStyle = getSectionStyle('image', collection)
@@ -52,13 +71,15 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
     const tagStyle = getSectionStyle('tag', collection)
     const summaryStyle = getSectionStyle('summary', collection)
 
+    const editor = this.editor
+
     return (
       <HTMLContainer id={shape.id}>
         <div
           style={{
             ...cardStyle,
             width: w,
-            height: h,
+            height: effectiveHeight,
             overflow: 'hidden',
             // fontFamily: 'serif',
             userSelect: 'none',
@@ -75,10 +96,39 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
               fontWeight: 700,
               fontSize: 20,
               display: 'flex',
-              alignItems: 'center'
+              alignItems: 'center',
+              gap: 8
             }}
           >
-            {title || '(untitled)'}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {title || '(untitled)'}
+            </span>
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => {
+                e.stopPropagation()
+                if (!editor) return
+                const next = !(showDetails ?? true)
+                editor.updateShapes([{
+                  id: shape.id,
+                  type: shape.type,
+                  props: { ...shape.props, showDetails: next }
+                }])
+              }}
+              style={{
+                background: '#fff',
+                color: '#000',
+                border: '2px solid #000',
+                padding: '2px 8px',
+                fontSize: 12,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                cursor: 'pointer'
+              }}
+              title={showDetails ? 'Hide details' : 'Show details'}
+            >
+              {showDetails ? '–' : '+'}
+            </button>
           </div>
           <div style={{ height: imageH, overflow: 'hidden', ...imageStyle }}>
             {image ? (
@@ -92,6 +142,13 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
                   objectPosition: 'center',
                   display: 'block',
                   background: imageStyle.background || '#111'
+                }}
+                onPointerDown={e => {
+                  // prevent native drag/copy but still allow drawing; hold Shift to allow native behavior if needed
+                  if (!e.shiftKey) e.preventDefault()
+                }}
+                onDragStart={e => {
+                  if (!e.shiftKey) e.preventDefault()
                 }}
                 onLoad={e => {
                   const nw = e.target.naturalWidth || 0
@@ -110,52 +167,56 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
               </div>
             )}
           </div>
-          <div
-            style={{
-              ...tagsBarStyle,
-              minHeight: tagsH,
-              padding: '8px 12px',
-              display: 'flex',
-              gap: 8,
-              flexWrap: 'wrap',
-              alignItems: 'center'
-            }}
-          >
-            {tags.map(tag => (
-              <span
-                key={tag}
-                className='text-sm font-mono tags'
+          {showDetails && (
+            <>
+              <div
                 style={{
-                  ...tagStyle,
-                  padding: '4px 10px',
-                  borderRadius: 999,
-                  // fontSize: 12,
-                  // fontFamily: 'monospace, Inter, sans-serif'
+                  ...tagsBarStyle,
+                  minHeight: tagsH,
+                  padding: '8px 12px',
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  alignItems: 'center'
                 }}
               >
-                {tag}
-              </span>
-            ))}
-          </div>
-          <div
-            style={{
-              ...summaryStyle,
-              height: summaryH,
-              padding: '12px',
-              fontSize: 16,
-              lineHeight: 1.35,
-              boxSizing: 'border-box'
-            }}
-          >
-            {summary || '(no summary)'}
-          </div>
+                {tags.map(tag => (
+                  <span
+                    key={tag}
+                    className='text-[12px] font-mono tags'
+                    style={{
+                      ...tagStyle,
+                      padding: '4px 10px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div
+                style={{
+                  ...summaryStyle,
+                  height: summaryH,
+                  padding: '12px',
+                  fontSize: 16,
+                  lineHeight: 1.35,
+                  boxSizing: 'border-box'
+                }}
+              >
+                {summary || '(no summary)'}
+              </div>
+            </>
+          )}
         </div>
       </HTMLContainer>
     )
   }
 
   indicator(shape) {
-    return <rect width={shape.props.w} height={shape.props.h} rx={12} ry={12} />
+    const { w } = shape.props
+    const effectiveHeight = this.getEffectiveHeight(shape)
+    return <rect width={w} height={effectiveHeight} rx={12} ry={12} />
   }
 }
 

@@ -11,7 +11,14 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tldraw": "^4.2.1"
+    "tldraw": "file:../tldraw/packages/tldraw",
+    "@tldraw/editor": "file:../tldraw/packages/editor",
+    "@tldraw/store": "file:../tldraw/packages/store",
+    "@tldraw/state": "file:../tldraw/packages/state",
+    "@tldraw/state-react": "file:../tldraw/packages/state-react",
+    "@tldraw/tlschema": "file:../tldraw/packages/tlschema",
+    "@tldraw/utils": "file:../tldraw/packages/utils",
+    "@tldraw/validate": "file:../tldraw/packages/validate"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",

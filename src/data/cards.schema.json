@@ -6,7 +6,7 @@
   "type": "array",
   "items": {
     "type": "object",
-    "required": ["id", "title", "summary", "collection", "tags", "image", "url"],
+    "required": ["id", "title", "summary", "collection", "tags", "image", "url", "date"],
     "additionalProperties": false,
     "properties": {
       "id": {
@@ -39,6 +39,10 @@
         "type": "string",
         "format": "uri",
         "description": "Link to open the detail page for this card"
+      },
+      "date": {
+        "type": "string",
+        "description": "Publication or relevant date (ISO 8601 preferred)"
       }
     }
   }

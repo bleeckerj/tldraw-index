@@ -181,7 +181,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
                   alignItems: 'center'
                 }}
               >
-                {tags.map(tag => (
+                {Array.from(new Set(tags)).map(tag => (
                   <span
                     key={tag}
                     className='font-mono tags'

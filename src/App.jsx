@@ -8,6 +8,7 @@ import cardsData from './data/cards.json'
 import { TimedLineShapeUtil, TimedLineTool, setTimedLineConfig } from './TimedLineTool.js'
 import { TimedDrawShapeUtil, TimedDrawTool } from './TimedDrawTool.js'
 import { TimedHighlightShapeUtil, TimedHighlightTool } from './TimedHighlightTool.js'
+import { CustomSelectionOutline, CustomSelectionCornerHandle, CustomShapeIndicator } from './CustomSelection.jsx'
 
 function randomPos(i) {
   return {
@@ -34,6 +35,7 @@ export default function App() {
     return saved ? saved === 'true' : false
   })
   const placed = useRef(false)
+  const positionsCache = useRef({})
 
   useEffect(() => {
     const cols = Array.from(new Set(cardsData.map(c => c.collection)))
@@ -69,7 +71,11 @@ export default function App() {
       if (savedVisible !== null) setShowControlPanel(savedVisible === 'true')
     }
     const pos = {}
-    cardsData.forEach((c, i) => { pos[c.id] = randomPos(i) })
+    cardsData.forEach((c, i) => {
+      const p = randomPos(i)
+      pos[c.id] = p
+      positionsCache.current[c.id] = p
+    })
     setPositions(pos)
   }, [])
 
@@ -87,67 +93,84 @@ export default function App() {
     [activeCollections, activeTags]
   )
 
-  // seed cards as custom shapes
-  useEffect(() => {
-    if (!appReady || placed.current || Object.keys(positions).length === 0 || !editorRef.current) return
-    const editor = editorRef.current
-    const shapes = cardsData.map((card, idx) => {
-      const pos = positions[card.id]
-      return {
-        id: createShapeId(card.id),
-        type: 'card',
-        x: pos.x,
-        y: pos.y,
-        props: {
-          w: 360,
-          h: 420,
-          title: card.title,
-          image: card.image,
-          summary: card.summary,
-          url: card.url || '',
-          collection: card.collection,
-          cardId: card.id,
-          tags: card.tags || [],
-          opacity: 1,
-          showDetails: true
-        },
-        meta: { cardId: card.id },
-        index: `a${idx}`
-      }
-    })
-    editor.createShapes(shapes)
-    placed.current = true
-  }, [appReady, positions])
-
-  // visibility + prop sync (merge JSON content into shapes, hide via opacity)
+  // visibility + prop sync (add/remove shapes instead of opacity)
   useEffect(() => {
     if (!appReady || !editorRef.current) return
     const editor = editorRef.current
-    const current = editor.getCurrentPageShapes().filter(s => s.type === 'card')
-    const cardById = new Map(cardsData.map(c => [c.id, c]))
-      const updates = current.map(shape => {
-        const card = cardById.get(shape.props.cardId)
-        const opacity = visibleIds.has(shape.props.cardId) ? 1 : 0
-        if (!card) return null
-        return {
-        id: shape.id,
-        type: 'card',
-        props: {
-          ...shape.props,
-          title: card.title,
-          image: card.image,
-          summary: card.summary,
-          url: card.url || '',
-          collection: card.collection,
-          cardId: card.id,
-          tags: card.tags || [],
-          opacity,
-          showDetails: shape.props.showDetails ?? true
-        }
+    
+    // 1. Sync current positions to cache
+    const currentShapes = editor.getCurrentPageShapes().filter(s => s.type === 'card')
+    currentShapes.forEach(shape => {
+      if (shape.props.cardId) {
+        positionsCache.current[shape.props.cardId] = { x: shape.x, y: shape.y }
       }
-    }).filter(Boolean)
-    if (updates.length) editor.updateShapes(updates)
-  }, [appReady, visibleIds, positions])
+    })
+
+    // 2. Determine what to add/remove/update
+    const currentCardIds = new Set(currentShapes.map(s => s.props.cardId))
+    const toDelete = currentShapes.filter(s => !visibleIds.has(s.props.cardId)).map(s => s.id)
+    const toAdd = [...visibleIds].filter(id => !currentCardIds.has(id))
+    const toUpdate = currentShapes.filter(s => visibleIds.has(s.props.cardId))
+
+    editor.run(() => {
+      // Delete hidden shapes
+      if (toDelete.length > 0) {
+        editor.deleteShapes(toDelete)
+      }
+
+      // Create new shapes
+      if (toAdd.length > 0) {
+        const shapes = toAdd.map(id => {
+          const card = cardsData.find(c => c.id === id)
+          const pos = positionsCache.current[id] || { x: 0, y: 0 }
+          return {
+            id: createShapeId(id),
+            type: 'card',
+            x: pos.x,
+            y: pos.y,
+            props: {
+              w: 360,
+              h: 420,
+              title: card.title,
+              image: card.image,
+              summary: card.summary,
+              url: card.url || '',
+              collection: card.collection,
+              cardId: card.id,
+              tags: card.tags || [],
+              opacity: 1,
+              showDetails: true
+            },
+            meta: { cardId: id }
+          }
+        })
+        editor.createShapes(shapes)
+      }
+
+      // Update existing shapes (sync props)
+      if (toUpdate.length > 0) {
+        const updates = toUpdate.map(shape => {
+          const card = cardsData.find(c => c.id === shape.props.cardId)
+          if (!card) return null
+          return {
+            id: shape.id,
+            type: 'card',
+            props: {
+              ...shape.props,
+              title: card.title,
+              image: card.image,
+              summary: card.summary,
+              url: card.url || '',
+              collection: card.collection,
+              tags: card.tags || [],
+              opacity: 1
+            }
+          }
+        }).filter(Boolean)
+        editor.updateShapes(updates)
+      }
+    })
+  }, [appReady, visibleIds])
 
   function toggleCollection(c, checked) {
     const next = new Set(activeCollections)
@@ -197,6 +220,7 @@ export default function App() {
       .forEach(shape => {
         const next = randomPos(i++)
         pos[shape.props.cardId] = next
+        positionsCache.current[shape.props.cardId] = next
         updates.push({
           id: shape.id,
           type: 'card',
@@ -207,6 +231,69 @@ export default function App() {
       })
     setPositions(p => ({ ...p, ...pos }))
     if (updates.length) editor.updateShapes(updates)
+  }
+
+  function layoutGrid() {
+    if (!appReady || !editorRef.current) return
+    const editor = editorRef.current
+    
+    const shapes = editor
+      .getCurrentPageShapes()
+      .filter(s => s.type === 'card' && visibleIds.has(s.props.cardId))
+    
+    if (shapes.length === 0) return
+
+    const GAP = 20
+    const CARD_WIDTH = 360
+    const COLUMNS = Math.max(3, Math.min(6, Math.ceil(Math.sqrt(shapes.length))))
+    
+    const colHeights = new Array(COLUMNS).fill(0)
+    const startX = 60
+    const startY = 60
+    
+    const updates = []
+    const pos = {}
+    
+    shapes.forEach(shape => {
+      let minCol = 0
+      for (let i = 1; i < COLUMNS; i++) {
+        if (colHeights[i] < colHeights[minCol]) {
+          minCol = i
+        }
+      }
+      
+      const x = startX + minCol * (CARD_WIDTH + GAP)
+      const y = startY + colHeights[minCol]
+      
+      const geo = editor.getShapeGeometry(shape)
+      const height = geo ? geo.bounds.h : shape.props.h
+
+      updates.push({
+        id: shape.id,
+        type: 'card',
+        x,
+        y,
+        props: { ...shape.props }
+      })
+      
+      pos[shape.props.cardId] = { x, y }
+      positionsCache.current[shape.props.cardId] = { x, y }
+      
+      colHeights[minCol] += height + GAP
+    })
+    
+    setPositions(p => ({ ...p, ...pos }))
+    if (updates.length) editor.updateShapes(updates)
+  }
+
+  function resetFilters() {
+    const cols = Array.from(new Set(cardsData.map(c => c.collection)))
+    setActiveCollections(new Set(cols))
+    setActiveTags(new Set())
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('panel:collections')
+      window.localStorage.removeItem('panel:tags')
+    }
   }
 
   function handleChange(app) {
@@ -469,6 +556,22 @@ export default function App() {
               />
               <span style={{ width: 44, textAlign: 'right' }}>{timedFadeSeconds.toFixed(1)}s</span>
             </div>
+            <div style={{ marginTop: 12, borderTop: '1px solid #eee', paddingTop: 8 }}>
+              <button
+                onClick={() => { cancelHide(); layoutGrid() }}
+                style={{
+                  width: '100%',
+                  background: '#fff',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontSize: 12
+                }}
+              >
+                Layout Grid
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -481,7 +584,10 @@ export default function App() {
         <CustomToolbarContent />
       </DefaultToolbar>
     ),
-    InFrontOfTheCanvas: ThemeCss
+    InFrontOfTheCanvas: ThemeCss,
+    SelectionOutline: CustomSelectionOutline,
+    SelectionCornerHandle: CustomSelectionCornerHandle,
+    ShapeIndicator: CustomShapeIndicator,
   }), [])
 
   return (
@@ -506,7 +612,7 @@ export default function App() {
         <div style={{ marginTop: 12 }}>
           <strong>Tags</strong>
           {tags.map(t => (
-            <div key={t}>
+            <div key={`tag-${t}`}>
               <label>
                 <input
                   type="checkbox"
@@ -521,6 +627,7 @@ export default function App() {
         <div style={{ marginTop: 12 }}>
           <button onClick={() => { /* legacy */ }}>Refresh</button>
           <button style={{ marginLeft: 8 }} onClick={() => shuffle()}>Shuffle</button>
+          <button style={{ marginLeft: 8 }} onClick={() => resetFilters()}>Reset</button>
         </div>
 
         <div style={{ marginTop: 18 }}>

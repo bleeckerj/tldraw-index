@@ -21,6 +21,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
       content: '',
       collection: '',
       cardId: '',
+      date: '',
       opacity: 1,
       showDetails: true
     }
@@ -40,7 +41,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
   getGeometry(shape) {
     const { w } = shape.props
     const effH = this.getEffectiveHeight(shape)
-    return new Rectangle2d({ x: 0, y: 0, width: w, height: effH, isFilled: false })
+    return new Rectangle2d({ x: 0, y: 0, width: w, height: effH, isFilled: true })
   }
 
   canResize() {
@@ -52,19 +53,21 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
   }
 
   component(shape) {
-    const { w, h, title, image, summary, tags = [], opacity = 1, collection, showDetails = true } = shape.props
+    const { w, h, title, image, summary, date, tags = [], opacity = 1, collection, showDetails = true } = shape.props
     const [aspectRatio, setAspectRatio] = React.useState(null)
     const titleH = 30
     const tagsH = showDetails ? 40 : 0
-    const reserved = titleH + tagsH + 20
+    const dateH = showDetails ? 20 : 0
+    const reserved = titleH + tagsH + dateH + 20
     const fallbackImageH = Math.max(140, Math.min(220, h * 0.45))
     const maxImageH = Math.max(100, h - reserved)
     const imageH = aspectRatio
       ? Math.max(80, Math.min(maxImageH, w * aspectRatio))
       : fallbackImageH
-    const summaryH = showDetails ? Math.max(80, h - titleH - imageH - tagsH - 10) : 0
+    const summaryH = showDetails ? Math.max(80, h - titleH - imageH - tagsH - dateH - 10) : 0
     const summaryFontSize = Math.max(8, Math.min(14, h * 0.04))
     const tagFontSize = Math.max(6, Math.min(10, h * 0.02))
+    const dateFontSize = Math.max(8, Math.min(12, h * 0.03))
     const titleFontSize = Math.max(8, Math.min(12, h * 0.05))
     const effectiveHeight = showDetails ? h : titleH + imageH
     const cardStyle = getSectionStyle('card', collection)
@@ -87,19 +90,60 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
             // fontFamily: 'serif',
             userSelect: 'none',
             opacity,
-            pointerEvents: opacity === 0 ? 'none' : 'auto',
+            pointerEvents: 'none', // Allow clicks to pass through to the canvas for selection
             visibility: opacity === 0 ? 'hidden' : 'visible'
           }}
         >
           <div className="macos-title-bar" style={{ height: titleH }}>
             <div 
               className="macos-btn" 
+              style={{ pointerEvents: 'auto' }}
               onPointerDown={e => e.stopPropagation()}
               onClick={e => {
                  e.stopPropagation()
+                 if (!editor) return
+                 const next = !(showDetails ?? true)
+                 const patch = { showDetails: next }
+
+                 if (next) {
+                   // Auto-resize height to fit content
+                   const estTitleH = 30
+                   const estTagsH = 40
+                   const estDateH = 20
+                   
+                   // Estimate image height (capped at width to avoid super tall images)
+                   let estImageH = 200
+                   if (aspectRatio) {
+                     estImageH = Math.min(w, w * aspectRatio)
+                   }
+                   
+                   // Estimate summary height
+                   const fontSize = 14
+                   const lineHeight = fontSize * 1.5
+                   const padding = 24
+                   const charWidth = fontSize * 0.55
+                   const availableW = w - 24
+                   const charsPerLine = Math.max(1, availableW / charWidth)
+                   const text = summary || ''
+                   const lines = Math.ceil(text.length / charsPerLine) || 1
+                   const estSummaryH = lines * lineHeight + padding
+                   
+                   const requiredH = estTitleH + estImageH + estTagsH + estDateH + estSummaryH + 20
+                   
+                   if (requiredH > h) {
+                     patch.h = requiredH
+                   }
+                 }
+
+                 editor.updateShapes([{
+                   id: shape.id,
+                   type: shape.type,
+                   props: { ...shape.props, ...patch }
+                 }])
               }}
+              title={showDetails ? 'Collapse' : 'Expand'}
             />
-            <div className="macos-title-container">
+            <div className="macos-title-container" style={{ pointerEvents: 'none' }}>
               <div className="macos-lines" />
               <span className="macos-title-text" style={{ fontSize: titleFontSize }}>
                 {title || '(untitled)'}
@@ -109,6 +153,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
             <div className="macos-btn-group">
               <div 
                 className="macos-btn"
+                style={{ pointerEvents: 'auto' }}
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => {
                    e.stopPropagation()
@@ -116,6 +161,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
               />
               <div 
                 className="macos-btn"
+                style={{ pointerEvents: 'auto' }}
                 onPointerDown={e => e.stopPropagation()}
                 onClick={e => {
                   e.stopPropagation()
@@ -168,6 +214,24 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
               </div>
             )}
           </div>
+          {showDetails && date && (
+            <div
+              style={{
+                height: dateH,
+                padding: '0 12px',
+                display: 'flex',
+                alignItems: 'center',
+                fontFamily: 'monospace',
+                fontSize: dateFontSize,
+                color: '#666',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                marginTop: 4
+              }}
+            >
+              {new Date(date).toLocaleDateString()}
+            </div>
+          )}
           {showDetails && (
             <>
               <div
@@ -216,9 +280,22 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
   }
 
   indicator(shape) {
-    const { w } = shape.props
+    const { w, collection } = shape.props
     const effectiveHeight = this.getEffectiveHeight(shape)
-    return <rect width={w} height={effectiveHeight} rx={12} ry={12} />
+    const cardStyle = getSectionStyle('card', collection)
+    const borderRadius = cardStyle.borderRadius ?? 0
+    
+    return (
+      <rect
+        width={w}
+        height={effectiveHeight}
+        rx={borderRadius}
+        ry={borderRadius}
+        stroke="#808080"
+        strokeWidth={2}
+        fill="none"
+      />
+    )
   }
 }
 

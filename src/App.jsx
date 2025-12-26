@@ -4,11 +4,43 @@ import { Tldraw, DefaultToolbar, DefaultToolbarContent, ToolbarItem } from 'tldr
 import { createShapeId } from '@tldraw/editor'
 import 'tldraw/tldraw.css'
 import CardShapeUtil from './CardShapeUtil.jsx'
-import cardsData from './data/cards.json'
+import rawCardsData from './data/cards.json'
 import { TimedLineShapeUtil, TimedLineTool, setTimedLineConfig } from './TimedLineTool.js'
 import { TimedDrawShapeUtil, TimedDrawTool } from './TimedDrawTool.js'
 import { TimedHighlightShapeUtil, TimedHighlightTool } from './TimedHighlightTool.js'
-import { CustomSelectionOutline, CustomSelectionCornerHandle, CustomShapeIndicator } from './CustomSelection.jsx'
+import { CustomSelectionOutline, CustomSelectionCornerHandle } from './CustomSelection.jsx'
+
+const cardsData = [...rawCardsData].sort((a, b) => {
+  const da = new Date(a.date || 0)
+  const db = new Date(b.date || 0)
+  return db - da
+})
+
+function calculateInitialLayout() {
+  const pos = {}
+  const GAP = 20
+  const CARD_WIDTH = 360
+  const COLUMNS = Math.max(3, Math.min(6, Math.ceil(Math.sqrt(cardsData.length))))
+  const colHeights = new Array(COLUMNS).fill(0)
+  const startX = 60
+  const startY = 60
+
+  cardsData.forEach((c) => {
+    let minCol = 0
+    for (let col = 1; col < COLUMNS; col++) {
+      if (colHeights[col] < colHeights[minCol]) {
+        minCol = col
+      }
+    }
+    const x = startX + minCol * (CARD_WIDTH + GAP)
+    const y = startY + colHeights[minCol]
+    const height = 420 // Default height
+
+    pos[c.id] = { x, y }
+    colHeights[minCol] += height + GAP
+  })
+  return pos
+}
 
 function randomPos(i) {
   return {
@@ -29,17 +61,28 @@ export default function App() {
   const [timedSeconds, setTimedSeconds] = useState(5)
   const [timedFadeSeconds, setTimedFadeSeconds] = useState(2)
   const [showTimedControls, setShowTimedControls] = useState(false)
+  const [showStylePanel, setShowStylePanel] = useState(true)
+  const [showInterface, setShowInterface] = useState(true)
   const [showControlPanel, setShowControlPanel] = useState(() => {
     if (typeof window === 'undefined') return false
     const saved = window.localStorage.getItem('panel:visible')
     return saved ? saved === 'true' : false
   })
   const placed = useRef(false)
-  const positionsCache = useRef({})
+  const positionsCache = useRef(calculateInitialLayout())
 
   useEffect(() => {
     const cols = Array.from(new Set(cardsData.map(c => c.collection)))
-    const ts = Array.from(new Set(cardsData.flatMap(c => c.tags)))
+    
+    // Calculate tag counts and filter/sort
+    const tagCounts = {}
+    cardsData.flatMap(c => c.tags || []).forEach(t => {
+      tagCounts[t] = (tagCounts[t] || 0) + 1
+    })
+    const ts = Object.keys(tagCounts)
+      .filter(t => tagCounts[t] > 5)
+      .sort((a, b) => a.localeCompare(b))
+
     setCollections(cols)
     setTags(ts)
     const savedCols = (() => {
@@ -70,13 +113,9 @@ export default function App() {
       const savedVisible = window.localStorage.getItem('panel:visible')
       if (savedVisible !== null) setShowControlPanel(savedVisible === 'true')
     }
-    const pos = {}
-    cardsData.forEach((c, i) => {
-      const p = randomPos(i)
-      pos[c.id] = p
-      positionsCache.current[c.id] = p
-    })
-    setPositions(pos)
+    
+    // Sync state with cache
+    setPositions(positionsCache.current)
   }, [])
 
   const visibleIds = useMemo(
@@ -100,16 +139,52 @@ export default function App() {
     
     // 1. Sync current positions to cache
     const currentShapes = editor.getCurrentPageShapes().filter(s => s.type === 'card')
-    currentShapes.forEach(shape => {
-      if (shape.props.cardId) {
-        positionsCache.current[shape.props.cardId] = { x: shape.x, y: shape.y }
-      }
+    const currentShapeMap = new Map(currentShapes.map(s => [s.props.cardId, s]))
+
+    // 2. Calculate new layout for ALL visible IDs
+    const visibleIdList = [...visibleIds].sort((a, b) => {
+      const idxA = cardsData.findIndex(c => c.id === a)
+      const idxB = cardsData.findIndex(c => c.id === b)
+      return idxA - idxB
     })
 
-    // 2. Determine what to add/remove/update
+    const GAP = 20
+    const CARD_WIDTH = 360
+    const COLUMNS = Math.max(3, Math.min(6, Math.ceil(Math.sqrt(visibleIdList.length))))
+    const colHeights = new Array(COLUMNS).fill(0)
+    const startX = 60
+    const startY = 60
+    const newPositions = {}
+
+    visibleIdList.forEach(id => {
+      let minCol = 0
+      for (let col = 1; col < COLUMNS; col++) {
+        if (colHeights[col] < colHeights[minCol]) {
+          minCol = col
+        }
+      }
+      const x = startX + minCol * (CARD_WIDTH + GAP)
+      const y = startY + colHeights[minCol]
+      
+      // Use existing height if available, else default
+      const existingShape = currentShapeMap.get(id)
+      let height = 420
+      if (existingShape) {
+        const geo = editor.getShapeGeometry(existingShape)
+        height = geo ? geo.bounds.h : existingShape.props.h
+      }
+
+      newPositions[id] = { x, y }
+      positionsCache.current[id] = { x, y }
+      
+      colHeights[minCol] += height + GAP
+    })
+    setPositions(p => ({ ...p, ...newPositions }))
+
+    // 3. Determine what to add/remove/update
     const currentCardIds = new Set(currentShapes.map(s => s.props.cardId))
     const toDelete = currentShapes.filter(s => !visibleIds.has(s.props.cardId)).map(s => s.id)
-    const toAdd = [...visibleIds].filter(id => !currentCardIds.has(id))
+    const toAdd = visibleIdList.filter(id => !currentCardIds.has(id))
     const toUpdate = currentShapes.filter(s => visibleIds.has(s.props.cardId))
 
     editor.run(() => {
@@ -122,7 +197,7 @@ export default function App() {
       if (toAdd.length > 0) {
         const shapes = toAdd.map(id => {
           const card = cardsData.find(c => c.id === id)
-          const pos = positionsCache.current[id] || { x: 0, y: 0 }
+          const pos = newPositions[id] || { x: 0, y: 0 }
           return {
             id: createShapeId(id),
             type: 'card',
@@ -138,6 +213,7 @@ export default function App() {
               collection: card.collection,
               cardId: card.id,
               tags: card.tags || [],
+              date: card.date || '',
               opacity: 1,
               showDetails: true
             },
@@ -147,14 +223,17 @@ export default function App() {
         editor.createShapes(shapes)
       }
 
-      // Update existing shapes (sync props)
+      // Update existing shapes (sync props + move to new grid position)
       if (toUpdate.length > 0) {
         const updates = toUpdate.map(shape => {
           const card = cardsData.find(c => c.id === shape.props.cardId)
           if (!card) return null
+          const pos = newPositions[shape.props.cardId]
           return {
             id: shape.id,
             type: 'card',
+            x: pos ? pos.x : shape.x,
+            y: pos ? pos.y : shape.y,
             props: {
               ...shape.props,
               title: card.title,
@@ -163,12 +242,15 @@ export default function App() {
               url: card.url || '',
               collection: card.collection,
               tags: card.tags || [],
+              date: card.date || '',
               opacity: 1
             }
           }
         }).filter(Boolean)
         editor.updateShapes(updates)
       }
+      
+      editor.zoomToFit({ animation: { duration: 400 } })
     })
   }, [appReady, visibleIds])
 
@@ -231,6 +313,7 @@ export default function App() {
       })
     setPositions(p => ({ ...p, ...pos }))
     if (updates.length) editor.updateShapes(updates)
+    editor.zoomToFit({ animation: { duration: 400 } })
   }
 
   function layoutGrid() {
@@ -240,6 +323,11 @@ export default function App() {
     const shapes = editor
       .getCurrentPageShapes()
       .filter(s => s.type === 'card' && visibleIds.has(s.props.cardId))
+      .sort((a, b) => {
+        const idxA = cardsData.findIndex(c => c.id === a.props.cardId)
+        const idxB = cardsData.findIndex(c => c.id === b.props.cardId)
+        return idxA - idxB
+      })
     
     if (shapes.length === 0) return
 
@@ -284,6 +372,7 @@ export default function App() {
     
     setPositions(p => ({ ...p, ...pos }))
     if (updates.length) editor.updateShapes(updates)
+    editor.zoomToFit({ animation: { duration: 400 } })
   }
 
   function resetFilters() {
@@ -296,21 +385,51 @@ export default function App() {
     }
   }
 
-  function handleChange(app) {
-    if (!app) return
-    editorRef.current = app
-    const selectedId = app
-      .getSelectedShapes()
-      .find(shape => shape.type === 'card' && visibleIds.has(shape.props.cardId))?.id
-    if (!selectedId) {
-      setSelectedCard(null)
-      return
-    }
-    const shape = app.getShape(selectedId)
-    const cardId = shape?.props?.cardId
-    const card = cardsData.find(c => c.id === cardId)
-    setSelectedCard(card || null)
-  }
+  // Handle selection changes and "move to front"
+  useEffect(() => {
+    if (!appReady || !editorRef.current) return
+    const editor = editorRef.current
+
+    const unsubscribe = editor.store.listen((event) => {
+      const changes = event.changes.updated
+      if (!changes) return
+
+      // Look for changes to the instance_page_state (which holds selection)
+      const instanceChange = Object.values(changes).find(
+        record => record[1].typeName === 'instance_page_state'
+      )
+
+      if (instanceChange) {
+        const [prev, next] = instanceChange
+        if (prev.selectedShapeIds !== next.selectedShapeIds) {
+          const selectedIds = next.selectedShapeIds
+          
+          if (selectedIds.length === 1) {
+            const id = selectedIds[0]
+            const shape = editor.getShape(id)
+            
+            if (shape && shape.type === 'card') {
+              // Update sidebar selection
+              const cardId = shape.props.cardId
+              const card = cardsData.find(c => c.id === cardId)
+              setSelectedCard(card || null)
+
+              // Move to front (deferred to avoid conflicts during update cycle)
+              requestAnimationFrame(() => {
+                editor.bringToFront([id])
+              })
+            } else {
+              setSelectedCard(null)
+            }
+          } else {
+            setSelectedCard(null)
+          }
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [appReady])
 
   // pinch zoom on trackpad
   function onWheel(e) {
@@ -572,27 +691,78 @@ export default function App() {
                 Layout Grid
               </button>
             </div>
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => { cancelHide(); setShowStylePanel(s => !s) }}
+                style={{
+                  width: '100%',
+                  background: '#fff',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontSize: 12
+                }}
+              >
+                {showStylePanel ? 'Hide Styles' : 'Show Styles'}
+              </button>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => { cancelHide(); setShowInterface(s => !s) }}
+                style={{
+                  width: '100%',
+                  background: '#fff',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontSize: 12
+                }}
+              >
+                {showInterface ? 'Hide Interface' : 'Show Interface'}
+              </button>
+            </div>
           </div>
         )}
       </div>
     )
   }
 
-  const uiComponents = useMemo(() => ({
-    Toolbar: (props) => (
-      <DefaultToolbar {...props}>
-        <CustomToolbarContent />
-      </DefaultToolbar>
-    ),
-    InFrontOfTheCanvas: ThemeCss,
-    SelectionOutline: CustomSelectionOutline,
-    SelectionCornerHandle: CustomSelectionCornerHandle,
-    ShapeIndicator: CustomShapeIndicator,
-  }), [])
+  const uiComponents = useMemo(() => {
+    const overrides = {
+      Toolbar: (props) => (
+        <DefaultToolbar {...props}>
+          <CustomToolbarContent />
+        </DefaultToolbar>
+      ),
+      InFrontOfTheCanvas: ThemeCss,
+      SelectionOutline: CustomSelectionOutline,
+      SelectionCornerHandle: CustomSelectionCornerHandle,
+    }
+    if (!showStylePanel) {
+      overrides.StylePanel = null
+    }
+    if (!showInterface) {
+      overrides.Toolbar = null
+      overrides.MainMenu = null
+      overrides.PageMenu = null
+      overrides.HelpMenu = null
+      overrides.NavigationPanel = null
+      overrides.DebugMenu = null
+      overrides.ActionsMenu = null
+      overrides.ZoomMenu = null
+      overrides.Minimap = null
+      overrides.KeyboardShortcutsDialog = null
+      overrides.QuickActions = null
+      overrides.HelperButtons = null
+    }
+    return overrides
+  }, [showStylePanel, showInterface])
 
   return (
-    <div style={{ height: '100vh', display: 'flex' }}>
-      <div style={{ width: 320, borderRight: '1px solid #ddd', padding: 12, boxSizing: 'border-box', position: 'relative' }}>
+    <div style={{ height: '100vh', minHeight: '800px', display: 'flex' }}>
+      <div style={{ width: 320, borderRight: '1px solid #ddd', padding: 12, boxSizing: 'border-box', position: 'relative', overflowY: 'auto' }}>
         <h3>Filters</h3>
         <div>
           <strong>Collections</strong>
@@ -610,19 +780,33 @@ export default function App() {
           ))}
         </div>
         <div style={{ marginTop: 12 }}>
-          <strong>Tags</strong>
-          {tags.map(t => (
-            <div key={`tag-${t}`}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={activeTags.has(t)}
-                  onChange={e => toggleTag(t, e.target.checked)}
-                />
-                {' '}{t}
-              </label>
-            </div>
-          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <strong>Tags</strong>
+            <button
+              onClick={() => {
+                setActiveTags(new Set())
+                if (typeof window !== 'undefined') window.localStorage.removeItem('panel:tags')
+              }}
+              disabled={activeTags.size === 0}
+              style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}
+            >
+              Clear
+            </button>
+          </div>
+          <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #eee', padding: 4 }}>
+            {tags.map(t => (
+              <div key={`tag-${t}`}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={activeTags.has(t)}
+                    onChange={e => toggleTag(t, e.target.checked)}
+                  />
+                  {' '}{t}
+                </label>
+              </div>
+            ))}
+          </div>
         </div>
         <div style={{ marginTop: 12 }}>
           <button onClick={() => { /* legacy */ }}>Refresh</button>
@@ -659,7 +843,6 @@ export default function App() {
         <Tldraw
           tools={[TimedLineTool, TimedDrawTool, TimedHighlightTool]}
           onMount={editor => { editorRef.current = editor; setAppReady(true) }}
-          onChange={handleChange}
           shapeUtils={[CardShapeUtil, TimedLineShapeUtil, TimedDrawShapeUtil, TimedHighlightShapeUtil]}
           overrides={uiOverrides}
           components={uiComponents}

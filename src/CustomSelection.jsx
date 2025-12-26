@@ -1,17 +1,22 @@
 import React from 'react'
-import { useEditor, DefaultShapeIndicator } from 'tldraw'
+import { useEditor } from 'tldraw'
+
+// --------------------------------------------------
+// CONFIGURATION
+// --------------------------------------------------
+const CARD_SELECTION_COLOR = '#808080'
+const CARD_HOVER_COLOR = '#808080'  // <--- Change this for the hover outline
+const CARD_HANDLE_FILL = 'black'
+const CARD_HANDLE_STROKE = 'white'
 
 export function CustomSelectionOutline({ width, height, className }) {
   const editor = useEditor()
   const onlySelectedShape = editor.getOnlySelectedShape()
   const isCard = onlySelectedShape?.type === 'card'
 
-  // --------------------------------------------------
-  // EDIT HERE: Customize the outline style
-  // --------------------------------------------------
-  // If the selected shape is a 'card', use gray
+  // If the selected shape is a 'card', use our custom color
   // Otherwise, use the default tldraw selection blue
-  const stroke = isCard ? '#808080' : 'var(--color-selection-stroke)'
+  const stroke = isCard ? CARD_SELECTION_COLOR : 'var(--color-selection-stroke)'
 
   return (
     <rect
@@ -31,13 +36,10 @@ export function CustomSelectionCornerHandle({ x, y, width, height, className }) 
   const onlySelectedShape = editor.getOnlySelectedShape()
   const isCard = onlySelectedShape?.type === 'card'
 
-  // --------------------------------------------------
-  // EDIT HERE: Customize the handle style
-  // --------------------------------------------------
-  // If it's a card, use black fill with white stroke
+  // If it's a card, use custom handle colors
   // Otherwise, use the default tldraw selection colors
-  const fill = isCard ? 'black' : 'var(--color-selection-handle-fill)'
-  const stroke = isCard ? 'white' : 'var(--color-selection-handle-stroke)'
+  const fill = isCard ? CARD_HANDLE_FILL : 'var(--color-selection-handle-fill)'
+  const stroke = isCard ? CARD_HANDLE_STROKE : 'var(--color-selection-handle-stroke)'
 
   return (
     <rect
@@ -52,19 +54,3 @@ export function CustomSelectionCornerHandle({ x, y, width, height, className }) 
   )
 }
 
-export function CustomShapeIndicator(props) {
-  const editor = useEditor()
-  const shape = editor.getShape(props.shapeId)
-  const isCard = shape?.type === 'card'
-
-  // If you want this style for ALL shapes, remove the "if (isCard)" check
-  if (isCard) {
-    return (
-      <div style={{ '--color-selection-stroke': '#808080', display: 'contents' }}>
-        <DefaultShapeIndicator {...props} />
-      </div>
-    )
-  }
-
-  return <DefaultShapeIndicator {...props} />
-}

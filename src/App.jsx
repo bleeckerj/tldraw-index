@@ -54,8 +54,10 @@ export default function App() {
   const [appReady, setAppReady] = useState(false)
   const [collections, setCollections] = useState([])
   const [tags, setTags] = useState([])
+  const [years, setYears] = useState([])
   const [activeCollections, setActiveCollections] = useState(new Set())
   const [activeTags, setActiveTags] = useState(new Set())
+  const [activeYears, setActiveYears] = useState(new Set())
   const [positions, setPositions] = useState({})
   const [selectedCard, setSelectedCard] = useState(null)
   const [timedSeconds, setTimedSeconds] = useState(5)
@@ -81,10 +83,12 @@ export default function App() {
     })
     const ts = Object.keys(tagCounts)
       .filter(t => tagCounts[t] > 5)
-      .sort((a, b) => a.localeCompare(b))
+    const ys = Array.from(new Set(cardsData.map(c => new Date(c.date || 0).getFullYear())))
+      .sort((a, b) => b - a)
 
     setCollections(cols)
     setTags(ts)
+    setYears(ys)
     const savedCols = (() => {
       if (typeof window === 'undefined') return null
       try {
@@ -103,8 +107,18 @@ export default function App() {
         return null
       }
     })()
+    const savedYears = (() => {
+      if (typeof window === 'undefined') return null
+      try {
+        const raw = window.localStorage.getItem('panel:years')
+        return raw ? new Set(JSON.parse(raw).filter(x => ys.includes(x))) : null
+      } catch {
+        return null
+      }
+    })()
     setActiveCollections(savedCols ?? new Set(cols))
     setActiveTags(savedTags ?? new Set())
+    setActiveYears(savedYears ?? new Set())
     if (typeof window !== 'undefined') {
       const savedLife = parseFloat(window.localStorage.getItem('panel:lifespan') || '')
       const savedFade = parseFloat(window.localStorage.getItem('panel:fade') || '')
@@ -125,11 +139,12 @@ export default function App() {
           .filter(
             c =>
               activeCollections.has(c.collection) &&
-              (activeTags.size === 0 || c.tags.some(t => activeTags.has(t)))
+              (activeTags.size === 0 || c.tags.some(t => activeTags.has(t))) &&
+              (activeYears.size === 0 || activeYears.has(new Date(c.date || 0).getFullYear()))
           )
           .map(c => c.id)
       ),
-    [activeCollections, activeTags]
+    [activeCollections, activeTags, activeYears]
   )
 
   // visibility + prop sync (add/remove shapes instead of opacity)
@@ -150,7 +165,7 @@ export default function App() {
 
     const GAP = 20
     const CARD_WIDTH = 360
-    const COLUMNS = Math.max(3, Math.min(6, Math.ceil(Math.sqrt(visibleIdList.length))))
+    const COLUMNS = Math.max(3, Math.min(18, Math.ceil(Math.sqrt(visibleIdList.length))))
     const colHeights = new Array(COLUMNS).fill(0)
     const startX = 60
     const startY = 60
@@ -289,6 +304,16 @@ export default function App() {
     }
   }
 
+  function toggleYear(y, checked) {
+    const next = new Set(activeYears)
+    if (checked) next.add(y)
+    else next.delete(y)
+    setActiveYears(next)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('panel:years', JSON.stringify(Array.from(next)))
+    }
+  }
+
   function shuffle() {
     if (!appReady) return
     const editor = editorRef.current
@@ -333,7 +358,7 @@ export default function App() {
 
     const GAP = 20
     const CARD_WIDTH = 360
-    const COLUMNS = Math.max(3, Math.min(6, Math.ceil(Math.sqrt(shapes.length))))
+    const COLUMNS = Math.max(3, Math.min(12, Math.ceil(Math.sqrt(shapes.length))))
     
     const colHeights = new Array(COLUMNS).fill(0)
     const startX = 60
@@ -379,9 +404,11 @@ export default function App() {
     const cols = Array.from(new Set(cardsData.map(c => c.collection)))
     setActiveCollections(new Set(cols))
     setActiveTags(new Set())
+    setActiveYears(new Set())
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('panel:collections')
       window.localStorage.removeItem('panel:tags')
+      window.localStorage.removeItem('panel:years')
     }
   }
 
@@ -763,16 +790,17 @@ export default function App() {
   return (
     <div style={{ height: '100vh', minHeight: '800px', display: 'flex' }}>
       <div style={{ width: 320, borderRight: '1px solid #ddd', padding: 12, boxSizing: 'border-box', position: 'relative', overflowY: 'auto' }}>
-        <h3>Filters</h3>
+        {/* <h3>Filters</h3> */}
         <div>
-          <strong>Collections</strong>
+          <span style={{ fontFamily: '"3270"', fontWeight: 'bold', fontSize: '18px' }}>Collections</span>
           {collections.map(c => (
             <div key={c}>
-              <label>
+              <label style={{ fontSize: '16px', fontFamily: '"3270"', display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={activeCollections.has(c)}
                   onChange={e => toggleCollection(c, e.target.checked)}
+                  style={{ margin: '0 6px 0 0' }}
                 />
                 {' '}{c}
               </label>
@@ -781,61 +809,97 @@ export default function App() {
         </div>
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <strong>Tags</strong>
+            <span style={{ fontFamily: '"3270"', fontWeight: 'bold', fontSize: '18px' }}>Years</span>
             <button
               onClick={() => {
-                setActiveTags(new Set())
-                if (typeof window !== 'undefined') window.localStorage.removeItem('panel:tags')
+                setActiveYears(new Set())
+                if (typeof window !== 'undefined') window.localStorage.removeItem('panel:years')
               }}
-              disabled={activeTags.size === 0}
-              style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}
+              disabled={activeYears.size === 0}
+              style={{ fontFamily: '"3270"', fontSize: 14, padding: '2px 6px', cursor: 'pointer' }}
             >
               Clear
             </button>
           </div>
-          <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #eee', padding: 4 }}>
-            {tags.map(t => (
-              <div key={`tag-${t}`}>
-                <label>
+          <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #eee', padding: 4 }}>
+            {years.map(y => (
+              <div key={`year-${y}`} style={{ lineHeight: '1.2' }}>
+                <label style={{ fontSize: '12px', fontFamily: '"3270"', display: 'flex', alignItems: 'center', cursor: 'pointer' }} >
                   <input
-                    type="checkbox"
-                    checked={activeTags.has(t)}
-                    onChange={e => toggleTag(t, e.target.checked)}
+                    type="checkbox" 
+                    checked={activeYears.has(y)}
+                    onChange={e => toggleYear(y, e.target.checked)}
+                    style={{ margin: '0 6px 0 0' }}
                   />
-                  {' '}{t}
+                  {y}
                 </label>
               </div>
             ))}
           </div>
         </div>
         <div style={{ marginTop: 12 }}>
-          <button onClick={() => { /* legacy */ }}>Refresh</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontFamily: '"3270"', fontWeight: 'bold', fontSize: '18px' }}>Tags</span>
+            <button
+              onClick={() => {
+                setActiveTags(new Set())
+                if (typeof window !== 'undefined') window.localStorage.removeItem('panel:tags')
+              }}
+              disabled={activeTags.size === 0}
+              style={{ fontFamily: '"3270"', fontSize: 14, padding: '2px 6px', cursor: 'pointer' }}
+            >
+              Clear
+            </button>
+          </div>
+          <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #eee', padding: 4 }}>
+            {tags.map(t => (
+              <div key={`tag-${t}`} style={{ lineHeight: '1.2' }}>
+                <label style={{ fontSize: '12px', fontFamily: '"3270"', display: 'flex', alignItems: 'center', cursor: 'pointer' }} >
+                  <input
+                    type="checkbox" 
+                    checked={activeTags.has(t)}
+                    onChange={e => toggleTag(t, e.target.checked)}
+                    style={{ margin: '0 6px 0 0' }}
+                  />
+                  {t}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* 
+        <div style={{ marginTop: 12 }}>
+          <button onClick={() => { }}>Refresh</button>
           <button style={{ marginLeft: 8 }} onClick={() => shuffle()}>Shuffle</button>
           <button style={{ marginLeft: 8 }} onClick={() => resetFilters()}>Reset</button>
-        </div>
-
+        </div> 
+        */}
         <div style={{ marginTop: 18 }}>
-          <h4>Selected</h4>
+          <span style={{ fontFamily: '"3270"', fontWeight: 'bold', fontSize: '16px' }}>Selected</span>
           {selectedCard ? (
             <div>
-              <strong>{selectedCard.title}</strong>
-              <p>{selectedCard.summary}</p>
-              <div style={{ fontSize: 12, color: '#666' }}>
-                <div>Collection: {selectedCard.collection}</div>
-                <div>Tags: {selectedCard.tags.join(', ')}</div>
+              <div style={{ fontFamily: '"ChicagoKare"', fontWeight: 'bold', fontSize: '18px' }}>{selectedCard.title}</div>
+              <p style={{ fontFamily: '"AppleGaramond"', lineHeight: 1.1 }}>{selectedCard.summary}</p>
+              <div style={{ margin: '8px 0px', fontSize: 12, color: '#666' }}>
+                COLLECTION: <span style={{ backgroundColor: "black", color: "white", margin: '2px', padding: '2px 4px', borderRadius: '4px', fontFamily: '"3270"', lineHeight: 1, display: 'inline-block' }}>{selectedCard.collection}</span><br />
+                TAGS: {selectedCard.tags.map(tag => (
+                  <span key={tag} style={{ backgroundColor: "black", color: "white", margin: '2px', padding: '2px 4px', borderRadius: '4px', fontFamily: '"3270"', lineHeight: 1, display: 'inline-block' }}>
+                    {tag}
+                  </span>
+                ))}
                 {selectedCard.url && (
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ fontFamily: '"3270"', marginTop: 12, fontSize: '18px', fontWeight: 'bold', backgroundColor: '#1a1a1a', color: 'white', padding: '4px 6px', borderRadius: '6px', display: 'inline-block' }}>
                     <a href={selectedCard.url} target="_blank" rel="noreferrer">Open detail</a>
                   </div>
                 )}
               </div>
-              <div style={{ marginTop: 8 }}>
+              {/* <div style={{ marginTop: 8 }}>
                 <button onClick={() => toggleDetails(selectedCard.id)}>
                   Toggle details
                 </button>
-              </div>
+              </div> */}
             </div>
-          ) : <div>(select a card)</div>}
+          ) : <div style={{ fontFamily: '"3270"', fontStyle: 'bold', fontSize: '12px' }}>(select a card)</div>}
         </div>
       </div>
 

@@ -66,7 +66,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
       : fallbackImageH
     const summaryH = showDetails ? Math.max(80, h - titleH - imageH - tagsH - dateH - 10) : 0
     const summaryFontSize = Math.max(8, Math.min(14, h * 0.04))
-    const tagFontSize = Math.max(6, Math.min(10, h * 0.02))
+    const tagFontSize = Math.max(10, Math.min(14, h * 0.02))
     const dateFontSize = Math.max(8, Math.min(12, h * 0.03))
     const titleFontSize = Math.max(8, Math.min(12, h * 0.05))
     const effectiveHeight = showDetails ? h : titleH + imageH
@@ -248,7 +248,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
                 {Array.from(new Set(tags)).map(tag => (
                   <span
                     key={tag}
-                    className='font-mono tags'
+                    className='font-["3270"] tags'
                     style={{
                       ...tagStyle,
                       padding: '4px 10px',

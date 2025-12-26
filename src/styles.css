@@ -3,7 +3,7 @@
 @source "./index.html";
 @source "./src/**/*.{js,jsx,ts,tsx}";
 
-html,body,#root { height: 100%; margin: 0; }
+html,body,#root { height: 100%; margin: 0; font-family: 'Inter', sans-serif; }
 .tldraw-root { height: 100%; }
 
 /* lighten resize handles for card selection */

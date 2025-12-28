@@ -276,24 +276,9 @@ export default function App() {
         editor.updateShapes(updates)
       }
       
-      if (selectedCard) {
-        const bounds = editor.getCurrentPageBounds()
-        if (bounds) {
-          const { w: vw, h: vh } = editor.getViewportScreenBounds()
-          const padding = 60
-          const zoom = Math.min(
-            (vw - padding * 2) / bounds.w,
-            (vh - padding * 2) / bounds.h
-          )
-          const targetX = (padding / zoom) - bounds.minX
-          const targetY = (vh / 2) / zoom - bounds.midY
-          editor.setCamera({ x: targetX, y: targetY, z: zoom }, { animation: { duration: 400 } })
-        }
-      } else {
-        editor.zoomToFit({ animation: { duration: 400 } })
-      }
+      editor.zoomToFit({ animation: { duration: 400 } })
     })
-  }, [appReady, visibleIds, currentPage, pageSize, selectedCard])
+  }, [appReady, visibleIds, currentPage, pageSize])
 
   function toggleCollection(c, checked) {
     const next = new Set(activeCollections)
@@ -469,9 +454,6 @@ export default function App() {
               setSelectedCard(card || null)
               setViewingUrl(null)
             }
-          } else if (selectedIds.length === 0) {
-            setSelectedCard(null)
-            setViewingUrl(null)
           }
         }
       }
@@ -978,7 +960,23 @@ export default function App() {
             </div>
           ) : (
             <>
-              <div style={{ fontFamily: '"ChicagoKare"', fontWeight: 'bold', lineHeight: 1, fontSize: '18px', marginBottom: 8 }}>{selectedCard.title}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div style={{ fontFamily: '"ChicagoKare"', fontWeight: 'bold', lineHeight: 1, fontSize: '18px', flex: 1, marginRight: 8 }}>{selectedCard.title}</div>
+                <button 
+                  onClick={() => { setSelectedCard(null); setViewingUrl(null); }}
+                  style={{ 
+                    fontFamily: '"3270"', 
+                    fontSize: '12px', 
+                    padding: '2px 6px', 
+                    cursor: 'pointer',
+                    border: '1px solid #ccc',
+                    background: 'white',
+                    flexShrink: 0
+                  }}
+                >
+                  CLOSE
+                </button>
+              </div>
               {selectedCard.image && (
                 <div style={{ marginBottom: 12 }}>
                   <img 

@@ -23,12 +23,14 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
       cardId: '',
       date: '',
       opacity: 1,
-      showDetails: true
+      showDetails: true,
+      isInfoCard: false
     }
   }
 
   getEffectiveHeight(shape) {
-    const { w, h, showDetails = true } = shape.props
+    const { w, h, showDetails = true, isInfoCard = false } = shape.props
+    if (isInfoCard) return h
     if (showDetails) return h
     const titleH = 30
     const reserved = titleH + 0 + 20
@@ -53,7 +55,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
   }
 
   component(shape) {
-    const { w, h, title, image, summary, date, tags = [], opacity = 1, collection, showDetails = true } = shape.props
+    const { w, h, title, image, summary, date, tags = [], opacity = 1, collection, showDetails = true, isInfoCard = false } = shape.props
     const [aspectRatio, setAspectRatio] = React.useState(null)
     const titleH = 30
     const tagsH = showDetails ? 40 : 0
@@ -79,6 +81,68 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
 
     const editor = this.editor
 
+    if (isInfoCard) {
+      return (
+        <HTMLContainer id={shape.id}>
+          <div
+            style={{
+              ...cardStyle,
+              width: w,
+              height: h,
+              overflow: 'hidden',
+              userSelect: 'none',
+              opacity,
+              pointerEvents: 'none',
+              visibility: opacity === 0 ? 'hidden' : 'visible',
+              display: 'flex',
+              flexDirection: 'column',
+              backgroundColor: '#f9f9f9'
+            }}
+          >
+            <div className="macos-title-bar" style={{ height: titleH, flexShrink: 0 }}>
+              <div 
+                className="macos-btn" 
+                style={{ pointerEvents: 'auto' }}
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => {
+                   e.stopPropagation()
+                   if (editor) editor.deleteShapes([shape.id])
+                }}
+                title="Close"
+              />
+              <div className="macos-title-container" style={{ pointerEvents: 'none' }}>
+                <div className="macos-lines" />
+                <span className="macos-title-text" style={{ fontSize: titleFontSize }}>
+                  Info
+                </span>
+                <div className="macos-lines" />
+              </div>
+            </div>
+            
+            <div style={{ padding: 16, overflowY: 'auto', flex: 1, pointerEvents: 'auto' }}>
+              <div style={{ color: '#000000', lineHeight: 1.1, fontFamily: 'ChicagoKare', fontWeight: 'bold', fontSize: '18px', marginBottom: '8px' }}>{title}</div>
+              <p style={{ fontFamily: '"AppleGaramond"', fontSize: '16px', lineHeight: 1.2, marginBottom: 12, color: '#000' }}>
+                {summary || ''}
+              </p>
+              <div style={{ fontSize: 12, color: '#666' }}>
+                COLLECTION: <span style={{ backgroundColor: "black", color: "white", margin: '2px', padding: '2px 4px', borderRadius: '4px', fontFamily: '"3270"', lineHeight: 1, display: 'inline-block' }}>{collection}</span><br />
+                TAGS: {tags.map(tag => (
+                  <span key={tag} style={{ backgroundColor: "black", color: "white", margin: '2px', padding: '2px 4px', borderRadius: '4px', fontFamily: '"3270"', lineHeight: 1, display: 'inline-block' }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              {shape.props.url && (
+                <div style={{ fontFamily: '"3270"', marginTop: 12, fontSize: '10px', fontWeight: 'bold', backgroundColor: '#1a1a1a', color: 'white', padding: '4px 6px', borderRadius: '6px', display: 'inline-block' }}>
+                  <a href={shape.props.url} target="_blank" rel="noreferrer" style={{ color: 'white', textDecoration: 'none' }} onPointerDown={e => e.stopPropagation()}>Open detail</a>
+                </div>
+              )}
+            </div>
+          </div>
+        </HTMLContainer>
+      )
+    }
+
     return (
       <HTMLContainer id={shape.id}>
         <div
@@ -102,6 +166,12 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
               onClick={e => {
                  e.stopPropagation()
                  if (!editor) return
+
+                 if (isInfoCard) {
+                   editor.deleteShapes([shape.id])
+                   return
+                 }
+
                  const next = !(showDetails ?? true)
                  const patch = { showDetails: next }
 
@@ -141,7 +211,7 @@ export class CardShapeUtil extends BaseBoxShapeUtil {
                    props: { ...shape.props, ...patch }
                  }])
               }}
-              title={showDetails ? 'Collapse' : 'Expand'}
+              title={isInfoCard ? 'Close' : (showDetails ? 'Collapse' : 'Expand')}
             />
             <div className="macos-title-container" style={{ pointerEvents: 'none' }}>
               <div className="macos-lines" />

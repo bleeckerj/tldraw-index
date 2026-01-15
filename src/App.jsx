@@ -235,17 +235,17 @@ export default function App() {
             props: {
               w: 360,
               h: 420,
-              title: card.title,
-              image: card.image,
-              summary: card.summary,
+              title: card.title || '',
+              image: card.image || '',
+              summary: card.summary || '',
               url: card.url || '',
-              collection: card.collection,
+              collection: card.collection || '',
               cardId: card.id,
-              tags: card.tags || [],
+              tags: Array.isArray(card.tags) ? card.tags : [],
               date: card.date || '',
               opacity: 1,
               showDetails: true,
-              noCoverImage: card.noCoverImage
+              noCoverImage: !!card.noCoverImage
             },
             meta: { cardId: id }
           }
@@ -266,15 +266,15 @@ export default function App() {
             y: pos ? pos.y : shape.y,
             props: {
               ...shape.props,
-              title: card.title,
-              image: card.image,
-              summary: card.summary,
+              title: card.title || '',
+              image: card.image || '',
+              summary: card.summary || '',
               url: card.url || '',
-              collection: card.collection,
-              tags: card.tags || [],
+              collection: card.collection || '',
+              tags: Array.isArray(card.tags) ? card.tags : [],
               date: card.date || '',
               opacity: 1,
-              noCoverImage: card.noCoverImage
+              noCoverImage: !!card.noCoverImage
             }
           }
         }).filter(Boolean)
@@ -1117,7 +1117,43 @@ export default function App() {
       <div style={{ flex: 1, position: 'relative' }} onWheel={onWheel}>
         <Tldraw
           tools={[TimedLineTool, TimedDrawTool, TimedHighlightTool]}
-          onMount={editor => { editorRef.current = editor; setAppReady(true) }}
+          onMount={editor => {
+            editorRef.current = editor
+
+            // Log detailed validation failures so we can see the bad record/field
+            editor.store.schema.options.onValidationFailure = ({ record, recordBefore, phase, error }) => {
+              const path = error?.path || []
+              // Try to locate the offending value using the validator's path
+              const leaf = (() => {
+                try {
+                  if (!path.length) return undefined
+                  // skip the leading 'shape' node; props path starts after that
+                  let cur = record
+                  for (const key of path) {
+                    if (cur && Object.prototype.hasOwnProperty.call(cur, key)) cur = cur[key]
+                    else if (key === '(type = card)' && cur?.props) cur = cur.props
+                    else return undefined
+                  }
+                  return cur
+                } catch {
+                  return undefined
+                }
+              })()
+
+              console.error('Store validation failure', {
+                phase,
+                record,
+                recordBefore,
+                message: error?.message,
+                path,
+                offendingValue: leaf,
+                offendingType: leaf?.constructor?.name
+              })
+              throw error
+            }
+
+            setAppReady(true)
+          }}
           shapeUtils={[CardShapeUtil, TimedLineShapeUtil, TimedDrawShapeUtil, TimedHighlightShapeUtil]}
           overrides={uiOverrides}
           components={uiComponents}
